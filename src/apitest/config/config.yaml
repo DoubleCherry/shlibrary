@@ -1,0 +1,24 @@
+users:
+  - name: "用户1"
+    headers:
+      clientId: "1837178870"
+      source: "1"
+      accessToken: "5f95ede7ab72521eea826e6c8ceb820f"
+      sign: "296f70811b1a82d921678f5b7642fe104d6af0bf0b5855a7477d8ea24661f34e"
+      timestamp: "1739459688834"
+      Cookie: "Hm_lpvt_5baf77ff3c256db2d753d59a23540a6b=1739352030; Hm_lvt_5baf77ff3c256db2d753d59a23540a6b=1739340195,1739352030"
+
+api:
+  base_url: "https://yuyue.library.sh.cn"
+  floor_id: "4"
+  library_id: "1"
+  seat_reservation_type: "2"
+  period_reservation_type: "14"
+
+area_priority:
+  - "西"
+  - "东"
+  - "北"
+  - "南"
+
+days_ahead: 6 

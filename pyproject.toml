@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "apitest"
+version = "0.1.0"
+description = "座位预订系统"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+packages = [{include = "apitest", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+click = "^8.1.7"
+pydantic = "^2.9.0"
+pydantic-settings = "^2.2.1"
+loguru = "^0.7.2"
+pyyaml = "^6.0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.1.1"
+flake8 = "^7.0.0"
+pyright = "^1.1.350"
+
+[tool.black]
+line-length = 79
+target-version = ["py311"]
+
+[tool.pyright]
+typeCheckingMode = "strict"
