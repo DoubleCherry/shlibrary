@@ -1,28 +1,30 @@
 """
 主入口模块
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 from datetime import datetime
 
 import click
+import yaml
 from loguru import logger
 
-from apitest.core.seat_reservation import SeatReservation
+from .core.seat_reservation import SeatReservation, ReservationResult
+from .config.settings import settings
 
 
-def init_logger(log_level: str = "INFO") -> None:
+def init_logger(log_level: Optional[str] = None) -> None:
     """初始化日志配置
     
     Args:
-        log_level: 日志级别
+        log_level: 日志级别，如果为 None 则使用配置文件中的设置
     """
     logger.add(
         "logs/app.log",
-        rotation="1 day",
-        retention="7 days",
-        level=log_level,
-        encoding="utf-8"
+        rotation=settings.LOG_ROTATION,
+        retention=settings.LOG_RETENTION,
+        level=log_level or settings.LOG_LEVEL,
+        encoding=settings.LOG_ENCODING
     )
 
 
@@ -42,8 +44,8 @@ def cli() -> None:
 @click.option(
     "--log-level",
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
-    default="INFO",
-    help="日志级别",
+    default=None,
+    help="日志级别（默认使用配置文件中的设置）",
     show_default=True
 )
 @click.option(
@@ -53,7 +55,7 @@ def cli() -> None:
     help="预订日期，格式：YYYY-MM-DD",
     show_default=True
 )
-def reserve(config: Path, log_level: str, date: datetime) -> None:
+def reserve(config: Path, log_level: Optional[str], date: datetime) -> None:
     """
     执行座位预订
     
@@ -66,14 +68,13 @@ def reserve(config: Path, log_level: str, date: datetime) -> None:
     
     try:
         # 读取用户配置
-        import yaml
         with open(config, "r", encoding="utf-8") as f:
             config_data: Dict[str, Any] = yaml.safe_load(f)
             
         # 添加日期信息到配置中
         formatted_date = date.strftime("%Y-%m-%d")
         
-        results: List[Dict[str, str]] = []
+        results: List[ReservationResult] = []
         # 为每个用户进行预订
         for user in config_data["users"]:
             user_config = {
@@ -117,10 +118,14 @@ def validate(config: Path) -> None:
         config: 用户配置文件路径
     """
     try:
-        import yaml
         with open(config, "r", encoding="utf-8") as f:
-            yaml.safe_load(f)
+            yaml.safe_load(f)  # 只验证文件格式，不需要使用返回值
         click.echo(f"配置文件 {config} 格式正确")
+        click.echo("当前配置:")
+        click.echo(f"API URL: {settings.API_BASE_URL}")
+        click.echo(f"预订间隔: {settings.RESERVATION_INTERVAL}ms")
+        click.echo(f"区域优先级: {settings.AREA_PRIORITY}")
+        click.echo(f"日志级别: {settings.LOG_LEVEL}")
     except Exception as e:
         raise click.ClickException(f"配置文件格式错误: {str(e)}")
 

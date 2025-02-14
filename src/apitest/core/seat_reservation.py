@@ -4,6 +4,7 @@
 from typing import Dict, List, Optional, Any, TypedDict
 import requests
 from loguru import logger
+import time
 
 from ..config.settings import settings
 from ..utils.helpers import (
@@ -203,10 +204,12 @@ class SeatReservation:
         end_time: str,
         date: str,
         period: str,
-        area_name: str
+        area_name: str,
+        max_retries: int = 3,
+        retry_interval: float = 1.0
     ) -> Dict[str, Any]:
         """
-        预订座位
+        预订座位，包含重试机制
         
         Args:
             area_id: 区域ID
@@ -217,6 +220,8 @@ class SeatReservation:
             date: 日期
             period: 时间段
             area_name: 区域名称
+            max_retries: 最大重试次数
+            retry_interval: 重试间隔（秒）
             
         Returns:
             预订结果字典
@@ -232,39 +237,57 @@ class SeatReservation:
             "seatRowColumn": seat_row_column
         }
         
-        # 更新请求头
-        headers = update_request_headers(self.headers)
-        
-        logger.info(f"预订座位: URL={url}, Headers={headers}, Data={data}")
-        
-        try:
-            response = requests.post(url, headers=headers, json=data)
-            logger.info(f"状态码: {response.status_code}")
-            logger.info(f"响应头: {response.headers}")
-            logger.info(f"响应内容: {response.text}")
-            
-            if response.status_code != 200:
-                logger.error(f"请求失败: {response.status_code} - {response.text}")
-                return {"status": "error", "message": f"请求失败: {response.status_code}"}
+        for attempt in range(max_retries):
+            try:
+                # 更新请求头
+                headers = update_request_headers(self.headers, force_update=False)
                 
-            result = response.json()
-            
-            # 如果预订成功，更新共享座位记录
-            if result.get("resultStatus", {}).get("code") == 0:
-                seat_no = int(seat_row_column.split("号")[0].split()[-1])
-                table_number = seat_row_column.split("排")[0]
-                if table_number not in settings.SHARED_SEAT_RECORDS[date][period][area_name]:
-                    settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number] = []
-                settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number].append(str(seat_no))
-                return {"status": "success", "message": "预订成功"}
-            else:
-                return {"status": "error", "message": result.get("resultStatus", {}).get("message", "未知错误")}
-        except requests.exceptions.RequestException as e:
-            logger.error(f"请求异常: {str(e)}")
-            return {"status": "error", "message": f"请求异常: {str(e)}"}
-        except Exception as e:
-            logger.error(f"解析响应时出错: {str(e)}")
-            return {"status": "error", "message": f"解析响应时出错: {str(e)}"}
+                logger.info(f"尝试第 {attempt + 1} 次预订: URL={url}, Headers={headers}, Data={data}")
+                
+                response = requests.post(url, headers=headers, json=data)
+                logger.info(f"状态码: {response.status_code}")
+                logger.info(f"响应头: {response.headers}")
+                logger.info(f"响应内容: {response.text}")
+                
+                if response.status_code != 200:
+                    logger.error(f"请求失败: {response.status_code} - {response.text}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_interval)
+                        continue
+                    return {"status": "error", "message": f"请求失败: {response.status_code}"}
+                    
+                result = response.json()
+                
+                # 如果预订成功，更新共享座位记录
+                if result.get("resultStatus", {}).get("code") == 0:
+                    seat_no = int(seat_row_column.split("号")[0].split()[-1])
+                    table_number = seat_row_column.split("排")[0]
+                    if table_number not in settings.SHARED_SEAT_RECORDS[date][period][area_name]:
+                        settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number] = []
+                    settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number].append(str(seat_no))
+                    return {"status": "success", "message": "预订成功"}
+                else:
+                    error_msg = result.get("resultStatus", {}).get("message", "未知错误")
+                    if "已被预订" in error_msg and attempt < max_retries - 1:
+                        logger.warning(f"座位已被预订，等待 {retry_interval} 秒后重试...")
+                        time.sleep(retry_interval)
+                        continue
+                    return {"status": "error", "message": error_msg}
+                    
+            except requests.exceptions.RequestException as e:
+                logger.error(f"请求异常: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_interval)
+                    continue
+                return {"status": "error", "message": f"请求异常: {str(e)}"}
+            except Exception as e:
+                logger.error(f"预订过程出错: {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(retry_interval)
+                    continue
+                return {"status": "error", "message": f"预订过程出错: {str(e)}"}
+        
+        return {"status": "error", "message": "达到最大重试次数"}
 
     def find_best_seat(
         self,
@@ -344,69 +367,116 @@ class SeatReservation:
             
         return None
 
+    def find_common_best_seat(self, seats_per_period: List[List[SeatInfo]], area_name: str, date: str, periods: List[str]) -> Optional[SeatInfo]:
+        """
+        找到所有给定时间段中共同存在的最佳座位。
+        参数:
+            seats_per_period: 每个时间段的可用座位列表（列表的列表）
+            area_name: 区域名称
+            date: 日期
+            periods: 时间段字符串列表，例如 ["09:00-10:00", "10:00-11:00"]
+        返回:
+            最佳座位信息字典，如果没有找到则返回 None。
+        """
+        if not seats_per_period:
+            return None
+        from typing import Set  
+        seats_first: List[SeatInfo] = seats_per_period[0]
+        common_ids: Set[int] = {seat["seatId"] for seat in seats_first}
+        for seats in seats_per_period[1:]:
+            common_ids.intersection_update({seat["seatId"] for seat in seats})
+        if not common_ids:
+            return None
+        common_seats: List[SeatInfo] = [seat for seat in seats_first if seat["seatId"] in common_ids]
+        # 如果是南区，只保留奇数桌，注意对 seat["seatRow"] 做 str() 转换
+        if area_name == "南":
+            common_seats = [seat for seat in common_seats if is_odd_table(str(seat["seatRow"]))]
+        if not common_seats:
+            return None
+        booked_tables_union: Set[str] = set()
+        for p in periods:
+            booked_tables = settings.SHARED_SEAT_RECORDS.get(date, {}).get(p, {}).get(area_name, {})
+            booked_tables_union.update(booked_tables.keys())
+        def extract_table_number(seat_info: SeatInfo) -> str:
+            return seat_info["seatRowColumn"].split("排")[0]
+        tables: Dict[str, List[SeatInfo]] = {}
+        for seat in common_seats:
+            table_number = extract_table_number(seat)
+            tables.setdefault(table_number, []).append(seat)
+        sorted_tables = sorted(tables.keys(), key=lambda t: 0 if t in booked_tables_union else 1)
+        for t in sorted_tables:
+            seats_in_table = tables[t]
+            max_seat_no = max(int(seat["seatNo"].replace("号", "")) for seat in seats_in_table)
+            preferred_order = get_preferred_seats(max_seat_no)
+            seats_in_table.sort(key=lambda seat: preferred_order.index(int(seat["seatNo"].replace("号", ""))) if int(seat["seatNo"].replace("号", "")) in preferred_order else len(preferred_order))
+            if seats_in_table:
+                return seats_in_table[0]
+        return None
+
     def make_reservation(self) -> List[ReservationResult]:
-        """
-        执行座位预订流程
-        
-        Returns:
-            预订结果列表，每个结果包含时间段、区域、座位和状态信息
-        """
+        """同时预订多个时段，确保同一用户在所有时段预订同一座位"""
         results: List[ReservationResult] = []
         target_date = get_target_date()
         logger.info(f"目标日期: {target_date}")
-        
-        # 初始化共享座位记录
+
         if target_date not in settings.SHARED_SEAT_RECORDS:
             settings.SHARED_SEAT_RECORDS[target_date] = {}
-            
-        # 获取可用时间段
-        periods = self.get_available_periods(target_date)
-        if not periods:
+
+        periods_data = self.get_available_periods(target_date)
+        if not periods_data:
             logger.warning("没有找到可用时间段")
             return results
-            
-        # 获取所有区域
+
+        period_strs: List[str] = []
+        for period in periods_data:
+            p_str: str = f"{period['startTime']}-{period['endTime']}"
+            period_strs.append(p_str)
+            if p_str not in settings.SHARED_SEAT_RECORDS[target_date]:
+                settings.SHARED_SEAT_RECORDS[target_date][p_str] = {}
+
         areas = self.get_areas()
         if not areas:
             logger.warning("没有找到可用区域")
             return results
-            
-        # 对每个时间段进行预订
-        for period in periods:
-            start_time = period["startTime"]
-            end_time = period["endTime"]
-            period_str = f"{start_time}-{end_time}"
-            logger.info(f"处理时间段: {period_str}")
-            
-            # 初始化时间段的共享座位记录
-            if period_str not in settings.SHARED_SEAT_RECORDS[target_date]:
-                settings.SHARED_SEAT_RECORDS[target_date][period_str] = {}
-                
-            # 遍历每个区域尝试预订
-            for area in areas:
-                area_name = area["areaName"]
-                area_id = str(area["id"])
-                logger.info(f"处理区域: {area_name} (ID: {area_id})")
-                
-                # 初始化区域的共享座位记录
-                if area_name not in settings.SHARED_SEAT_RECORDS[target_date][period_str]:
-                    settings.SHARED_SEAT_RECORDS[target_date][period_str][area_name] = {}
-                    
-                # 获取区域座位信息
+
+        for area in areas:
+            area_name = area["areaName"]
+            area_id = str(area["id"])
+            for p_str in period_strs:
+                if area_name not in settings.SHARED_SEAT_RECORDS[target_date][p_str]:
+                    settings.SHARED_SEAT_RECORDS[target_date][p_str][area_name] = {}
+
+            seats_per_period: List[List[SeatInfo]] = []
+            all_periods_available = True
+            for period in periods_data:
+                start_time = period["startTime"]
+                end_time = period["endTime"]
                 seats = self.get_area_seats(area_id, start_time, end_time)
                 if not seats:
-                    logger.warning(f"区域 {area_name} 没有找到可用座位")
-                    continue
-                    
-                # 找到最佳座位
-                best_seat = self.find_best_seat(seats, area_name, target_date, period_str)
-                if not best_seat:
-                    logger.warning(f"区域 {area_name} 没有找到最佳座位")
-                    continue
-                    
-                logger.info(f"找到最佳座位: {best_seat['seatRowColumn']}")
-                
-                # 尝试预订座位
+                    all_periods_available = False
+                    break
+                seats_per_period.append(seats)
+            if not all_periods_available:
+                continue
+
+            best_seat = self.find_common_best_seat(seats_per_period, area_name, target_date, period_strs)
+            if not best_seat:
+                logger.warning(f"区域 {area_name} 没有找到共同的最佳座位")
+                continue
+
+            logger.info(f"区域 {area_name} 找到共同最佳座位: {best_seat['seatRowColumn']}")
+
+            success_for_all = True
+            for i, period in enumerate(periods_data):
+                # 如果不是第一次预订，则等待指定的时间间隔
+                if i > 0:
+                    interval = settings.RESERVATION_INTERVAL / 1000  # 转换为秒
+                    logger.info(f"等待 {interval} 秒后进行下一次预订...")
+                    time.sleep(interval)
+
+                start_time = period["startTime"]
+                end_time = period["endTime"]
+                p_str = f"{start_time}-{end_time}"
                 result = self.reserve_seat(
                     area_id=area_id,
                     seat_id=best_seat["seatId"],
@@ -414,22 +484,22 @@ class SeatReservation:
                     start_time=start_time,
                     end_time=end_time,
                     date=target_date,
-                    period=period_str,
+                    period=p_str,
                     area_name=area_name
                 )
-                
-                # 记录预订结果
                 status = "成功" if result.get("status") == "success" else "失败"
-                logger.info(f"预订结果: {status}")
+                message = result.get("message", "")
+                logger.info(f"区域 {area_name} 时间段 {p_str} 预订结果: {status} - {message}")
                 results.append({
-                    "time_period": period_str,
+                    "time_period": p_str,
                     "area": area_name,
                     "seat": best_seat["seatRowColumn"],
-                    "status": status
+                    "status": f"{status} - {message}"
                 })
-                
-                # 如果预订成功，继续下一个时间段
-                if result.get("status") == "success":
+                if result.get("status") != "success":
+                    success_for_all = False
+                    # 如果预订失败，立即尝试下一个区域
                     break
-                    
+            if success_for_all:
+                break
         return results 

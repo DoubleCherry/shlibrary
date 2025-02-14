@@ -1,24 +1,44 @@
+# 用户配置
 users:
   - name: "用户1"
     headers:
       clientId: "1837178870"
       source: "1"
-      accessToken: "5f95ede7ab72521eea826e6c8ceb820f"
-      sign: "296f70811b1a82d921678f5b7642fe104d6af0bf0b5855a7477d8ea24661f34e"
-      timestamp: "1739459688834"
+      accessToken: "c531acb567c7daa10a4c8cfec83b72da"
+      sign: "3cdf99e17baeab5f6bd2b8828dd0752dfed46a9b28f50b0ae500e33da45e4a77"
+      timestamp: "1739509170680"
       Cookie: "Hm_lpvt_5baf77ff3c256db2d753d59a23540a6b=1739352030; Hm_lvt_5baf77ff3c256db2d753d59a23540a6b=1739340195,1739352030"
 
+# API 配置
 api:
+  # 基础 URL
   base_url: "https://yuyue.library.sh.cn"
+  # 楼层 ID
   floor_id: "4"
+  # 图书馆 ID
   library_id: "1"
+  # 座位预订类型
   seat_reservation_type: "2"
+  # 时间段预订类型
   period_reservation_type: "14"
+  # 预订请求间隔（毫秒）
+  reservation_interval: 500
 
+# 区域优先级配置
 area_priority:
   - "西"
   - "东"
   - "北"
   - "南"
 
-days_ahead: 6 
+# 日志配置
+logging:
+  level: "INFO"
+  rotation: "1 day"
+  retention: "7 days"
+  encoding: "utf-8"
+
+# 预订配置
+reservation:
+  # 预订提前天数
+  days_ahead: 6 
