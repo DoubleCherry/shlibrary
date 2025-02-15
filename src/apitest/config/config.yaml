@@ -41,4 +41,7 @@ logging:
 # 预订配置
 reservation:
   # 预订提前天数
-  days_ahead: 6 
+  days_ahead: 6
+
+# 捡漏配置
+snipe_interval: 60  # 捡漏频率(秒) 

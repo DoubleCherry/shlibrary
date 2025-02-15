@@ -1,10 +1,10 @@
 """
-配置文件
+应用配置模块
 """
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from pathlib import Path
 import yaml
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import BaseModel
 
 
@@ -20,18 +20,30 @@ def load_yaml_config() -> Dict[str, Any]:
 
 class Settings(BaseSettings):
     """应用程序设置"""
+    # API配置
     api_base_url: str = ""
     floor_id: str = ""
     library_id: str = ""
     seat_reservation_type: str = ""
     period_reservation_type: str = ""
     reservation_interval: int = 500
+    
+    # 区域优先级
     area_priority: List[str] = []
+    
+    # 日志配置
     log_level: str = "INFO"
     log_rotation: str = "1 day"
     log_retention: str = "7 days"
     log_encoding: str = "utf-8"
+    
+    # 预订配置
     days_ahead: int = 6
+    
+    # 捡漏配置
+    snipe_interval: int = 60  # 捡漏频率(秒)
+    
+    # 共享座位记录
     shared_seat_records: Dict[str, Dict[str, Dict[str, Dict[str, List[str]]]]] = {}
     
     def update_from_request(self, request: "ReservationRequest") -> None:
@@ -52,6 +64,12 @@ class Settings(BaseSettings):
         self.log_retention = request.logging.retention
         self.log_encoding = request.logging.encoding
         self.days_ahead = request.reservation.days_ahead
+    
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="allow"
+    )
 
 
 # 加载 YAML 配置
@@ -81,6 +99,9 @@ if yaml_config:
     
     if "reservation" in yaml_config:
         settings.days_ahead = yaml_config["reservation"]["days_ahead"]
+    
+    if "snipe_interval" in yaml_config:
+        settings.snipe_interval = yaml_config["snipe_interval"]
 
 # 避免循环导入
 from ..schemas.request_models import ReservationRequest

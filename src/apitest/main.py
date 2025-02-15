@@ -14,7 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core.seat_reservation import SeatReservation, ReservationResult
 from .config.settings import settings
-from .api.endpoints import router
+from .api import endpoints
+from .api import snipe_endpoints
 
 # 创建FastAPI应用
 app = FastAPI(
@@ -33,7 +34,8 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(router, prefix="/api/v1")
+app.include_router(endpoints.router)
+app.include_router(snipe_endpoints.router)
 
 
 def init_logger(log_level: Optional[str] = None) -> None:
@@ -173,6 +175,12 @@ def validate(config: Path) -> None:
         click.echo(f"日志级别: {settings.log_level}")
     except Exception as e:
         raise click.ClickException(f"配置文件格式错误: {str(e)}")
+
+
+@app.get("/")
+async def root():
+    """根路由"""
+    return {"message": "座位预订API服务"}
 
 
 if __name__ == "__main__":
