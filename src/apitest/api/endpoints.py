@@ -27,6 +27,9 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
         # 更新全局设置
         settings.update_from_request(request)
         
+        # 移除所有现有的日志处理器
+        logger.remove()
+        
         # 初始化日志
         logger.add(
             "logs/app.log",
@@ -36,32 +39,37 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
             encoding=request.logging.encoding
         )
         
-        results: List[ReservationResult] = []
         formatted_date = request.date.strftime("%Y-%m-%d")
         
-        # 为每个用户进行预订
-        for user in request.users:
-            user_config = {
+        # 准备所有用户的配置
+        users_config = [
+            {
                 "name": user.name,
                 "headers": user.headers,
                 "date": formatted_date
             }
+            for user in request.users
+        ]
+        
+        if not users_config:
+            logger.error("请求中没有找到用户信息")
+            raise HTTPException(status_code=400, detail="请求中没有找到用户信息")
             
-            # 创建预订实例并执行预订
-            reservation = SeatReservation(user_config)
-            user_results = reservation.make_reservation()
-            results.extend(user_results)
-            
-            # 记录预订结果
-            for result in user_results:
-                logger.info(
-                    f"用户: {user.name}, "
-                    f"日期: {formatted_date}, "
-                    f"时间段: {result['time_period']}, "
-                    f"区域: {result['area']}, "
-                    f"座位: {result['seat']}, "
-                    f"状态: {result['status']}"
-                )
+        # 创建预订实例并执行多人预订
+        reservation = SeatReservation({"headers": users_config[0]["headers"]})
+        results = reservation.make_reservation(users_config)
+        
+        # 记录预订结果
+        for i, result in enumerate(results):
+            user_name = users_config[i % len(users_config)]["name"]
+            logger.info(
+                f"用户: {user_name}, "
+                f"日期: {formatted_date}, "
+                f"时间段: {result['time_period']}, "
+                f"区域: {result['area']}, "
+                f"座位: {result['seat']}, "
+                f"状态: {result['status']}"
+            )
         
         return results
     

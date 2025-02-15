@@ -123,19 +123,15 @@ def reserve(config: Path, log_level: Optional[str], date: datetime) -> None:
         # 添加日期信息到配置中
         formatted_date = date.strftime("%Y-%m-%d")
         
-        results: List[ReservationResult] = []
-        # 为每个用户进行预订
-        for user in config_data["users"]:
-            user_config = {
-                "name": user["name"],
-                "headers": user["headers"],
-                "date": formatted_date
-            }
+        # 获取用户列表
+        users_config = config_data.get("users", [])
+        if not users_config:
+            logger.error("配置文件中没有找到用户信息")
+            raise click.ClickException("配置文件中没有找到用户信息")
             
-            # 创建预订实例并执行预订
-            reservation = SeatReservation(user_config)
-            user_results = reservation.make_reservation()
-            results.extend(user_results)
+        # 创建预订实例并执行预订
+        reservation = SeatReservation({"headers": users_config[0]["headers"]})  # 使用第一个用户的 headers 初始化
+        results = reservation.make_reservation(users_config)
         
         # 打印预订结果
         for result in results:

@@ -1,7 +1,7 @@
 """
 座位预订核心模块
 """
-from typing import Dict, List, Optional, Any, TypedDict
+from typing import Dict, List, Optional, Any, TypedDict, Set
 import requests
 from loguru import logger
 import time
@@ -370,29 +370,43 @@ class SeatReservation:
             
         return None
 
-    def find_common_best_seat(self, seats_per_period: List[List[SeatInfo]], area_name: str, date: str, periods: List[str]) -> Optional[SeatInfo]:
+    def find_common_best_seat(
+        self,
+        seats_per_period: List[List[SeatInfo]],
+        area_name: str,
+        date: str,
+        periods: List[str],
+        required_seats: int = 1
+    ) -> List[Optional[SeatInfo]]:
         """
-        找到所有给定时间段中共同存在的最佳座位。
-        参数:
+        找到所有给定时间段中共同存在的最佳座位组合。
+        
+        Args:
             seats_per_period: 每个时间段的可用座位列表（列表的列表）
             area_name: 区域名称
             date: 日期
-            periods: 时间段字符串列表，例如 ["09:00-10:00", "10:00-11:00"]
-        返回:
-            最佳座位信息字典，如果没有找到则返回 None。
+            periods: 时间段字符串列表
+            required_seats: 需要的座位数量
+            
+        Returns:
+            最佳座位组合列表，如果没有找到则返回空列表
         """
         if not seats_per_period:
-            return None
-        from typing import Set  
-        seats_first: List[SeatInfo] = seats_per_period[0]
+            return []
+            
         # 找到在所有时间段都可用的座位
+        seats_first: List[SeatInfo] = seats_per_period[0]
         common_seats: List[SeatInfo] = []
+        
         for seat in seats_first:
             if seat["seatStatus"] != 3:
                 continue
             is_available_all_periods = True
             for other_period_seats in seats_per_period[1:]:
-                found_seat = next((s for s in other_period_seats if s["seatId"] == seat["seatId"]), None)
+                found_seat = next(
+                    (s for s in other_period_seats if s["seatId"] == seat["seatId"]), 
+                    None
+                )
                 if not found_seat or found_seat["seatStatus"] != 3:
                     is_available_all_periods = False
                     break
@@ -400,67 +414,114 @@ class SeatReservation:
                 common_seats.append(seat)
         
         if not common_seats:
-            return None
-        # 如果是南区，只保留奇数桌，注意对 seat["seatRow"] 做 str() 转换
+            return []
+            
+        # 如果是南区，只保留奇数桌
         if area_name == "南":
-            common_seats = [seat for seat in common_seats if is_odd_table(str(seat["seatRow"]))]
+            common_seats = [
+                seat for seat in common_seats 
+                if is_odd_table(str(seat["seatRow"]))
+            ]
+            
         if not common_seats:
-            return None
-        booked_tables_union: Set[str] = set()
-        for p in periods:
-            booked_tables = settings.shared_seat_records.get(date, {}).get(p, {}).get(area_name, {})
-            booked_tables_union.update(booked_tables.keys())
-        def extract_table_number(seat_info: SeatInfo) -> str:
-            return seat_info["seatRowColumn"].split("排")[0]
+            return []
+            
+        # 按桌号分组座位
         tables: Dict[str, List[SeatInfo]] = {}
         for seat in common_seats:
-            table_number = extract_table_number(seat)
-            tables.setdefault(table_number, []).append(seat)
-        sorted_tables = sorted(tables.keys(), key=lambda t: 0 if t in booked_tables_union else 1)
-        for t in sorted_tables:
-            seats_in_table = tables[t]
-            max_seat_no = max(int(seat["seatNo"].replace("号", "")) for seat in seats_in_table)
+            table_number = seat["seatRowColumn"].split("排")[0]
+            if table_number not in tables:
+                tables[table_number] = []
+            tables[table_number].append(seat)
+        
+        # 筛选出有足够座位的桌子
+        valid_tables = {
+            table: seats 
+            for table, seats in tables.items() 
+            if len(seats) >= required_seats
+        }
+        
+        if not valid_tables:
+            return []
+            
+        # 对每个桌子的座位按照右侧优先排序
+        result_seats: List[Optional[SeatInfo]] = []
+        for table_seats in valid_tables.values():
+            if len(result_seats) == required_seats:
+                break
+                
+            max_seat_no = max(
+                int(seat["seatNo"].replace("号", "")) 
+                for seat in table_seats
+            )
             preferred_order = get_preferred_seats(max_seat_no)
-            seats_in_table.sort(key=lambda seat: preferred_order.index(int(seat["seatNo"].replace("号", ""))) if int(seat["seatNo"].replace("号", "")) in preferred_order else len(preferred_order))
-            if seats_in_table:
-                return seats_in_table[0]
-        return None
+            
+            # 按照优先级排序座位
+            table_seats.sort(
+                key=lambda seat: preferred_order.index(
+                    int(seat["seatNo"].replace("号", ""))
+                ) if int(seat["seatNo"].replace("号", "")) in preferred_order 
+                else len(preferred_order)
+            )
+            
+            # 添加所需数量的座位
+            seats_needed = required_seats - len(result_seats)
+            result_seats.extend(table_seats[:seats_needed])
+            
+        return result_seats
 
-    def make_reservation(self) -> List[ReservationResult]:
-        """同时预订多个时段，确保同一用户在所有时段预订同一座位"""
+    def make_reservation(self, users_config: List[Dict[str, Any]]) -> List[ReservationResult]:
+        """
+        为多个用户同时预订座位
+        
+        Args:
+            users_config: 用户配置列表，每个用户包含 headers 等信息
+            
+        Returns:
+            预订结果列表
+        """
         results: List[ReservationResult] = []
         target_date = get_target_date()
         logger.info(f"目标日期: {target_date}")
-
+        
+        # 初始化共享座位记录
         if target_date not in settings.shared_seat_records:
             settings.shared_seat_records[target_date] = {}
-
+            
+        # 获取可用时间段
         periods_data = self.get_available_periods(target_date)
         if not periods_data:
             logger.warning("没有找到可用时间段")
             return results
-
+            
+        # 初始化时间段记录
         period_strs: List[str] = []
         for period in periods_data:
             p_str: str = f"{period['startTime']}-{period['endTime']}"
             period_strs.append(p_str)
             if p_str not in settings.shared_seat_records[target_date]:
                 settings.shared_seat_records[target_date][p_str] = {}
-
+                
+        # 获取并按优先级排序区域
         areas = self.get_areas()
         if not areas:
             logger.warning("没有找到可用区域")
             return results
-
+            
+        # 遍历每个区域
         for area in areas:
             area_name = area["areaName"]
             area_id = str(area["id"])
+            
+            # 初始化区域记录
             for p_str in period_strs:
                 if area_name not in settings.shared_seat_records[target_date][p_str]:
                     settings.shared_seat_records[target_date][p_str][area_name] = {}
-
+                    
+            # 获取每个时间段的座位信息
             seats_per_period: List[List[SeatInfo]] = []
             all_periods_available = True
+            
             for period in periods_data:
                 start_time = period["startTime"]
                 end_time = period["endTime"]
@@ -469,50 +530,78 @@ class SeatReservation:
                     all_periods_available = False
                     break
                 seats_per_period.append(seats)
+                
             if not all_periods_available:
                 continue
-
-            best_seat = self.find_common_best_seat(seats_per_period, area_name, target_date, period_strs)
-            if not best_seat:
-                logger.warning(f"区域 {area_name} 没有找到共同的最佳座位")
+                
+            # 查找满足所有用户的座位组合
+            best_seats = self.find_common_best_seat(
+                seats_per_period=seats_per_period,
+                area_name=area_name,
+                date=target_date,
+                periods=period_strs,
+                required_seats=len(users_config)
+            )
+            
+            if not best_seats:
+                logger.warning(f"区域 {area_name} 没有找到足够的共同座位")
                 continue
-
-            logger.info(f"区域 {area_name} 找到共同最佳座位: {best_seat['seatRowColumn']}")
-
-            success_for_all = True
-            for i, period in enumerate(periods_data):
-                # 如果不是第一次预订，则等待指定的时间间隔
-                if i > 0:
-                    interval = settings.reservation_interval / 1000  # 转换为秒
-                    logger.info(f"等待 {interval} 秒后进行下一次预订...")
-                    time.sleep(interval)
-
-                start_time = period["startTime"]
-                end_time = period["endTime"]
-                p_str = f"{start_time}-{end_time}"
-                result = self.reserve_seat(
-                    area_id=area_id,
-                    seat_id=best_seat["seatId"],
-                    seat_row_column=best_seat["seatRowColumn"],
-                    start_time=start_time,
-                    end_time=end_time,
-                    date=target_date,
-                    period=p_str,
-                    area_name=area_name
-                )
-                status = "成功" if result.get("status") == "success" else "失败"
-                message = result.get("message", "")
-                logger.info(f"区域 {area_name} 时间段 {p_str} 预订结果: {status} - {message}")
-                results.append({
-                    "time_period": p_str,
-                    "area": area_name,
-                    "seat": best_seat["seatRowColumn"],
-                    "status": f"{status} - {message}"
-                })
-                if result.get("status") != "success":
-                    success_for_all = False
-                    # 如果预订失败，立即尝试下一个区域
+                
+            logger.info(f"区域 {area_name} 找到共同座位: {[seat['seatRowColumn'] for seat in best_seats]}")
+            
+            # 为每个用户预订座位
+            reservation_failed = False  # 标记是否有预订失败（非已预约的情况）
+            for user_idx, (user_config, seat) in enumerate(zip(users_config, best_seats)):
+                # 更新当前实例的 headers
+                self.headers = user_config["headers"]
+                
+                for i, period in enumerate(periods_data):
+                    # 如果不是第一次预订，则等待指定的时间间隔
+                    if i > 0 or user_idx > 0:
+                        interval = settings.reservation_interval / 1000
+                        logger.info(f"等待 {interval} 秒后进行下一次预订...")
+                        time.sleep(interval)
+                        
+                    start_time = period["startTime"]
+                    end_time = period["endTime"]
+                    p_str = f"{start_time}-{end_time}"
+                    
+                    result = self.reserve_seat(
+                        area_id=area_id,
+                        seat_id=seat["seatId"],
+                        seat_row_column=seat["seatRowColumn"],
+                        start_time=start_time,
+                        end_time=end_time,
+                        date=target_date,
+                        period=p_str,
+                        area_name=area_name
+                    )
+                    
+                    status = "成功" if result.get("status") == "success" else "失败"
+                    message = result.get("message", "")
+                    
+                    logger.info(
+                        f"用户 {user_idx + 1} 在区域 {area_name} "
+                        f"时间段 {p_str} 预订结果: {status} - {message}"
+                    )
+                    
+                    results.append({
+                        "time_period": p_str,
+                        "area": area_name,
+                        "seat": seat["seatRowColumn"],
+                        "status": f"{status} - {message}"
+                    })
+                    
+                    # 如果预订失败，且不是因为已有预约，则需要切换区域重试
+                    if result.get("status") != "success" and "在该时间段有其他预约" not in message:
+                        reservation_failed = True
+                        break
+                
+                if reservation_failed:
                     break
-            if success_for_all:
+                    
+            # 只有在发生预订失败（非已预约）的情况下才切换区域
+            if not reservation_failed:
                 break
+                
         return results 
