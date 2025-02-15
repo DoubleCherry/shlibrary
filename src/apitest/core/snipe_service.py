@@ -48,26 +48,22 @@ class SnipeService:
         today = date.today()
         yesterday = today - timedelta(days=1)
         
-        # 计算目标日期与今天的相对天数
-        days_diff = (target_date - today).days
-        
         logger.debug(
             f"日期调试信息: "
             f"目标日期={target_date} ({type(target_date)}), "
             f"今天={today} ({type(today)}), "
-            f"昨天={yesterday} ({type(yesterday)}), "
-            f"相对天数={days_diff}"
+            f"昨天={yesterday} ({type(yesterday)})"
         )
         
-        # 验证目标日期 - 只有相对天数小于0的才算过期
-        if days_diff < 0:
+        # 验证目标日期 - 只有昨天及以前的日期才算过期
+        if target_date <= yesterday:
             logger.warning(
                 f"无法创建过期任务: "
                 f"用户={user_name}, "
                 f"目标日期={target_date}, "
                 f"今天={today}, "
                 f"昨天={yesterday}, "
-                f"相对天数={days_diff}"
+                f"目标日期<=昨天={target_date <= yesterday}"
             )
             raise ValueError("无法创建过期的任务")
         
@@ -76,7 +72,7 @@ class SnipeService:
             f"用户={user_name}, "
             f"目标日期={target_date}, "
             f"今天={today}, "
-            f"相对天数={days_diff}"
+            f"昨天={yesterday}"
         )
         
         # 检查是否已存在相同的任务
