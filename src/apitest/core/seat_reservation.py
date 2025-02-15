@@ -52,21 +52,24 @@ class ReservationResult(TypedDict):
 class SeatReservation:
     """座位预订类"""
     
-    def __init__(self, user_config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]):
         """
         初始化座位预订实例
         
         Args:
-            user_config: 用户配置字典，包含 headers 和 name
+            config: 预订配置
         """
-        self.headers: Dict[str, str] = user_config["headers"]
-        self.user_name: str = user_config["name"]
-        self.base_url: str = settings.API_BASE_URL
+        self.config = config
+        self.base_url: str = settings.api_base_url
+        self.headers = self._get_headers()
         
+    def _get_headers(self):
+        return self.config["headers"]
+
     def get_areas(self) -> List[Dict[str, Any]]:
         """获取所有区域信息"""
         url = f"{self.base_url}/eastLibReservation/area"
-        params = {"floorId": settings.FLOOR_ID}
+        params = {"floorId": settings.floor_id}
         headers = update_request_headers(self.headers)
         response = requests.get(url, headers=headers, params=params)
         logger.info(f"获取区域响应: {response.text}")
@@ -76,9 +79,9 @@ class SeatReservation:
         # 按照优先级排序区域
         def get_area_priority(area: Dict[str, Any]) -> int:
             try:
-                return settings.AREA_PRIORITY.index(area["areaName"])
+                return settings.area_priority.index(area["areaName"])
             except ValueError:
-                return len(settings.AREA_PRIORITY)
+                return len(settings.area_priority)
         
         return sorted(areas, key=get_area_priority)
 
@@ -95,8 +98,8 @@ class SeatReservation:
         url = f"{self.base_url}/eastLibReservation/api/period"
         params = {
             "date": date,
-            "reservationType": settings.PERIOD_RESERVATION_TYPE,
-            "libraryId": settings.LIBRARY_ID
+            "reservationType": settings.period_reservation_type,
+            "libraryId": settings.library_id
         }
         
         # 更新请求头
@@ -229,11 +232,11 @@ class SeatReservation:
         url = f"{self.base_url}/eastLibReservation/seatReservation/reservation"
         data = {
             "areaId": area_id,
-            "floorId": settings.FLOOR_ID,
+            "floorId": settings.floor_id,
             "reservationStartDate": f"{date} {start_time}",
             "reservationEndDate": f"{date} {end_time}",
             "seatId": seat_id,
-            "seatReservationType": settings.SEAT_RESERVATION_TYPE,
+            "seatReservationType": settings.seat_reservation_type,
             "seatRowColumn": seat_row_column
         }
         
@@ -262,9 +265,9 @@ class SeatReservation:
                 if result.get("resultStatus", {}).get("code") == 0:
                     seat_no = int(seat_row_column.split("号")[0].split()[-1])
                     table_number = seat_row_column.split("排")[0]
-                    if table_number not in settings.SHARED_SEAT_RECORDS[date][period][area_name]:
-                        settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number] = []
-                    settings.SHARED_SEAT_RECORDS[date][period][area_name][table_number].append(str(seat_no))
+                    if table_number not in settings.shared_seat_records[date][period][area_name]:
+                        settings.shared_seat_records[date][period][area_name][table_number] = []
+                    settings.shared_seat_records[date][period][area_name][table_number].append(str(seat_no))
                     return {"status": "success", "message": "预订成功"}
                 else:
                     error_msg = result.get("resultStatus", {}).get("message", "未知错误")
@@ -335,7 +338,7 @@ class SeatReservation:
             return None
 
         # 获取当前时间段已预订的桌子
-        booked_tables = settings.SHARED_SEAT_RECORDS[date][period][area_name]
+        booked_tables = settings.shared_seat_records[date][period][area_name]
         
         # 对桌子进行排序，优先选择已有预订的桌子
         sorted_tables: List[tuple[int, str]] = []
@@ -382,12 +385,22 @@ class SeatReservation:
             return None
         from typing import Set  
         seats_first: List[SeatInfo] = seats_per_period[0]
-        common_ids: Set[int] = {seat["seatId"] for seat in seats_first}
-        for seats in seats_per_period[1:]:
-            common_ids.intersection_update({seat["seatId"] for seat in seats})
-        if not common_ids:
+        # 找到在所有时间段都可用的座位
+        common_seats: List[SeatInfo] = []
+        for seat in seats_first:
+            if seat["seatStatus"] != 3:
+                continue
+            is_available_all_periods = True
+            for other_period_seats in seats_per_period[1:]:
+                found_seat = next((s for s in other_period_seats if s["seatId"] == seat["seatId"]), None)
+                if not found_seat or found_seat["seatStatus"] != 3:
+                    is_available_all_periods = False
+                    break
+            if is_available_all_periods:
+                common_seats.append(seat)
+        
+        if not common_seats:
             return None
-        common_seats: List[SeatInfo] = [seat for seat in seats_first if seat["seatId"] in common_ids]
         # 如果是南区，只保留奇数桌，注意对 seat["seatRow"] 做 str() 转换
         if area_name == "南":
             common_seats = [seat for seat in common_seats if is_odd_table(str(seat["seatRow"]))]
@@ -395,7 +408,7 @@ class SeatReservation:
             return None
         booked_tables_union: Set[str] = set()
         for p in periods:
-            booked_tables = settings.SHARED_SEAT_RECORDS.get(date, {}).get(p, {}).get(area_name, {})
+            booked_tables = settings.shared_seat_records.get(date, {}).get(p, {}).get(area_name, {})
             booked_tables_union.update(booked_tables.keys())
         def extract_table_number(seat_info: SeatInfo) -> str:
             return seat_info["seatRowColumn"].split("排")[0]
@@ -419,8 +432,8 @@ class SeatReservation:
         target_date = get_target_date()
         logger.info(f"目标日期: {target_date}")
 
-        if target_date not in settings.SHARED_SEAT_RECORDS:
-            settings.SHARED_SEAT_RECORDS[target_date] = {}
+        if target_date not in settings.shared_seat_records:
+            settings.shared_seat_records[target_date] = {}
 
         periods_data = self.get_available_periods(target_date)
         if not periods_data:
@@ -431,8 +444,8 @@ class SeatReservation:
         for period in periods_data:
             p_str: str = f"{period['startTime']}-{period['endTime']}"
             period_strs.append(p_str)
-            if p_str not in settings.SHARED_SEAT_RECORDS[target_date]:
-                settings.SHARED_SEAT_RECORDS[target_date][p_str] = {}
+            if p_str not in settings.shared_seat_records[target_date]:
+                settings.shared_seat_records[target_date][p_str] = {}
 
         areas = self.get_areas()
         if not areas:
@@ -443,8 +456,8 @@ class SeatReservation:
             area_name = area["areaName"]
             area_id = str(area["id"])
             for p_str in period_strs:
-                if area_name not in settings.SHARED_SEAT_RECORDS[target_date][p_str]:
-                    settings.SHARED_SEAT_RECORDS[target_date][p_str][area_name] = {}
+                if area_name not in settings.shared_seat_records[target_date][p_str]:
+                    settings.shared_seat_records[target_date][p_str][area_name] = {}
 
             seats_per_period: List[List[SeatInfo]] = []
             all_periods_available = True
@@ -470,7 +483,7 @@ class SeatReservation:
             for i, period in enumerate(periods_data):
                 # 如果不是第一次预订，则等待指定的时间间隔
                 if i > 0:
-                    interval = settings.RESERVATION_INTERVAL / 1000  # 转换为秒
+                    interval = settings.reservation_interval / 1000  # 转换为秒
                     logger.info(f"等待 {interval} 秒后进行下一次预订...")
                     time.sleep(interval)
 

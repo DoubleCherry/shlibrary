@@ -11,7 +11,7 @@ from ..config.settings import settings
 
 def get_target_date() -> str:
     """获取目标日期"""
-    target_date = datetime.now() + timedelta(days=settings.DAYS_AHEAD)
+    target_date = datetime.now() + timedelta(days=settings.days_ahead)
     return target_date.strftime("%Y-%m-%d")
 
 
@@ -65,9 +65,9 @@ def update_request_headers(headers: Dict[str, str], force_update: bool = False) 
         "Accept": "application/json, text/plain, */*",
         "Accept-Language": "zh-CN,zh;q=0.9",
         "Content-Type": "application/json",
-        "Origin": settings.API_BASE_URL,
-        "Referer": f"{settings.API_BASE_URL}/",
-        "Host": settings.API_BASE_URL.replace("https://", ""),
+        "Origin": settings.api_base_url,
+        "Referer": f"{settings.api_base_url}/",
+        "Host": settings.api_base_url.replace("https://", ""),
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Connection": "keep-alive",
         "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
@@ -106,4 +106,4 @@ def is_odd_table(row: str) -> bool:
 
 def format_datetime(time_str: str) -> str:
     """格式化时间字符串"""
-    return time_str 
+    return time_str

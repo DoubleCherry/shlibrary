@@ -8,15 +8,15 @@ WORKDIR /app
 RUN pip install poetry
 
 # 复制项目文件
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml ./
 COPY src ./src
 COPY README.md ./
 
 # 配置poetry不创建虚拟环境
 RUN poetry config virtualenvs.create false
 
-# 安装依赖
-RUN poetry install --no-dev --no-interaction --no-ansi
+# 生成lock文件并安装依赖
+RUN poetry lock && poetry install --only main --no-interaction --no-ansi
 
 # 运行阶段
 FROM python:3.10-slim
@@ -37,8 +37,11 @@ RUN useradd -m appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# 暴露端口（如果需要的话，根据实际应用需求修改）
+# 创建日志目录
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app/logs
+
+# 暴露端口
 EXPOSE 8000
 
 # 启动命令
-CMD ["python", "-m", "apitest.main"] 
+CMD ["python", "-m", "apitest.main", "serve"] 

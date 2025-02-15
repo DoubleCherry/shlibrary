@@ -8,9 +8,32 @@ from datetime import datetime
 import click
 import yaml
 from loguru import logger
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from .core.seat_reservation import SeatReservation, ReservationResult
 from .config.settings import settings
+from .api.endpoints import router
+
+# 创建FastAPI应用
+app = FastAPI(
+    title="图书馆座位预订系统",
+    description="自动预订图书馆座位的API服务",
+    version="1.0.0"
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 注册路由
+app.include_router(router, prefix="/api/v1")
 
 
 def init_logger(log_level: Optional[str] = None) -> None:
@@ -21,10 +44,10 @@ def init_logger(log_level: Optional[str] = None) -> None:
     """
     logger.add(
         "logs/app.log",
-        rotation=settings.LOG_ROTATION,
-        retention=settings.LOG_RETENTION,
-        level=log_level or settings.LOG_LEVEL,
-        encoding=settings.LOG_ENCODING
+        rotation=settings.log_rotation,
+        retention=settings.log_retention,
+        level=log_level or settings.log_level,
+        encoding=settings.log_encoding
     )
 
 
@@ -32,6 +55,32 @@ def init_logger(log_level: Optional[str] = None) -> None:
 def cli() -> None:
     """座位预订系统命令行工具"""
     pass
+
+
+@cli.command()
+@click.option(
+    "--host",
+    default="0.0.0.0",
+    help="服务器监听地址",
+    show_default=True
+)
+@click.option(
+    "--port",
+    default=8000,
+    help="服务器监听端口",
+    show_default=True
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+    default=None,
+    help="日志级别（默认使用配置文件中的设置）",
+    show_default=True
+)
+def serve(host: str, port: int, log_level: Optional[str]) -> None:
+    """启动API服务器"""
+    init_logger(log_level)
+    uvicorn.run(app, host=host, port=port)
 
 
 @cli.command()
@@ -122,10 +171,10 @@ def validate(config: Path) -> None:
             yaml.safe_load(f)  # 只验证文件格式，不需要使用返回值
         click.echo(f"配置文件 {config} 格式正确")
         click.echo("当前配置:")
-        click.echo(f"API URL: {settings.API_BASE_URL}")
-        click.echo(f"预订间隔: {settings.RESERVATION_INTERVAL}ms")
-        click.echo(f"区域优先级: {settings.AREA_PRIORITY}")
-        click.echo(f"日志级别: {settings.LOG_LEVEL}")
+        click.echo(f"API URL: {settings.api_base_url}")
+        click.echo(f"预订间隔: {settings.reservation_interval}ms")
+        click.echo(f"区域优先级: {settings.area_priority}")
+        click.echo(f"日志级别: {settings.log_level}")
     except Exception as e:
         raise click.ClickException(f"配置文件格式错误: {str(e)}")
 
