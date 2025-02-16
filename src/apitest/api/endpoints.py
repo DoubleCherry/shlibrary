@@ -27,18 +27,6 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
         # 更新全局设置
         settings.update_from_request(request)
         
-        # 移除所有现有的日志处理器
-        logger.remove()
-        
-        # 初始化日志
-        logger.add(
-            "logs/app.log",
-            rotation=request.logging.rotation,
-            retention=request.logging.retention,
-            level=request.logging.level,
-            encoding=request.logging.encoding
-        )
-        
         formatted_date = request.date.strftime("%Y-%m-%d")
         
         # 准备所有用户的配置
