@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException
 from loguru import logger
+from datetime import datetime
 
 from ..schemas.request_models import ReservationRequest
 from ..core.seat_reservation import SeatReservation, ReservationResult
@@ -9,8 +10,8 @@ from ..config.settings import settings
 router = APIRouter()
 
 
-@router.post("/reserve", response_model=List[Dict[str, Any]])
-async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
+@router.post("/reserve", response_model=Dict[str, Any])
+async def reserve_seat(request: ReservationRequest) -> Dict[str, Any]:
     """
     座位预订接口
     
@@ -18,7 +19,11 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
         request: 预订请求参数
         
     Returns:
-        List[ReservationResult]: 预订结果列表
+        Dict[str, Any]: {
+            "success": bool,  # 是否成功
+            "message": str,   # 提示信息
+            "results": List[ReservationResult]  # 预订结果列表
+        }
         
     Raises:
         HTTPException: 当预订过程出现错误时抛出
@@ -30,26 +35,33 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
         formatted_date = request.date.strftime("%Y-%m-%d")
         
         # 准备所有用户的配置
-        users_config = [
-            {
-                "name": user.name,
-                "headers": user.headers,
-                "date": formatted_date
-            }
-            for user in request.users
-        ]
+        users_config = request.users
         
         if not users_config:
             logger.error("请求中没有找到用户信息")
-            raise HTTPException(status_code=400, detail="请求中没有找到用户信息")
+            return {
+                "success": False,
+                "message": "请求中没有找到用户信息",
+                "results": []
+            }
             
         # 创建预订实例并执行多人预订
-        reservation = SeatReservation({"headers": users_config[0]["headers"]})
+        reservation = SeatReservation({"token": users_config[0].token})
         results = reservation.make_reservation(users_config)
+        
+        # 如果结果为空，说明没有找到可用时间段或座位
+        if not results:
+            target_date = request.date.strftime("%Y-%m-%d")
+            current_time = datetime.now().strftime("%H:%M:%S")
+            return {
+                "success": False,
+                "message": f"无可用预订资源 - 目标日期: {target_date}, 当前时间: {current_time}",
+                "results": []
+            }
         
         # 记录预订结果
         for i, result in enumerate(results):
-            user_name = users_config[i % len(users_config)]["name"]
+            user_name = users_config[i % len(users_config)].name
             logger.info(
                 f"用户: {user_name}, "
                 f"日期: {formatted_date}, "
@@ -59,8 +71,17 @@ async def reserve_seat(request: ReservationRequest) -> List[ReservationResult]:
                 f"状态: {result['status']}"
             )
         
-        return results
+        return {
+            "success": True,
+            "message": "预订请求处理完成",
+            "results": results
+        }
     
     except Exception as e:
-        logger.error(f"预订过程出错: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        error_msg = str(e)
+        logger.error(f"预订过程出错: {error_msg}")
+        return {
+            "success": False,
+            "message": f"预订过程出错: {error_msg}",
+            "results": []
+        } 

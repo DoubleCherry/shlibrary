@@ -6,7 +6,11 @@ from datetime import datetime
 class UserConfig(BaseModel):
     """用户配置模型"""
     name: str = Field(..., description="用户名称")
-    headers: Dict[str, str] = Field(..., description="请求头信息")
+    token: str = Field(..., description="用户token")
+
+    def get_headers(self) -> Dict[str, str]:
+        """获取请求头"""
+        return {"token": self.token}
 
 
 class ApiConfig(BaseModel):
@@ -42,4 +46,15 @@ class ReservationRequest(BaseModel):
     date: datetime = Field(
         default_factory=lambda: datetime.now(),
         description="预订日期，格式：YYYY-MM-DD"
-    ) 
+    )
+
+
+class TokenUser(BaseModel):
+    """Token用户模型"""
+    token: str = Field(..., description="用户token")
+
+
+class SimpleReservationRequest(BaseModel):
+    """简化版预订请求模型"""
+    users: List[TokenUser] = Field(..., description="用户token列表")
+    date: datetime = Field(..., description="预订日期时间") 

@@ -181,7 +181,7 @@ class SnipeService:
             # 为每个任务创建预订实例
             reservations = []
             for task in tasks:
-                config = {"headers": {"token": task.user_token}}
+                config = {"token": task.user_token}
                 reservation = SeatReservation(config)
                 reservations.append(reservation)
             

@@ -57,14 +57,15 @@ class SeatReservation:
         初始化座位预订实例
         
         Args:
-            config: 预订配置
+            config: 预订配置，包含 token
         """
         self.config = config
         self.base_url: str = settings.api_base_url
         self.headers = self._get_headers()
         
     def _get_headers(self):
-        return self.config["headers"]
+        """获取请求头"""
+        return {"token": self.config["token"]}
 
     def get_areas(self) -> List[Dict[str, Any]]:
         """获取所有区域信息"""
@@ -475,7 +476,7 @@ class SeatReservation:
         为多个用户同时预订座位
         
         Args:
-            users_config: 用户配置列表，每个用户包含 headers 等信息
+            users_config: 用户配置列表，每个用户包含 token 信息
             
         Returns:
             预订结果列表
@@ -553,7 +554,7 @@ class SeatReservation:
             reservation_failed = False  # 标记是否有预订失败（非已预约的情况）
             for user_idx, (user_config, seat) in enumerate(zip(users_config, best_seats)):
                 # 更新当前实例的 headers
-                self.headers = user_config["headers"]
+                self.headers = {"token": user_config.token}
                 
                 for i, period in enumerate(periods_data):
                     # 如果不是第一次预订，则等待指定的时间间隔
