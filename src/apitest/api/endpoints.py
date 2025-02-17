@@ -6,6 +6,7 @@ from datetime import datetime
 from ..schemas.request_models import ReservationRequest
 from ..core.seat_reservation import SeatReservation, ReservationResult
 from ..config.settings import settings
+from ..utils.helpers import get_target_date
 
 router = APIRouter()
 
@@ -32,7 +33,12 @@ async def reserve_seat(request: ReservationRequest) -> Dict[str, Any]:
         # 更新全局设置
         settings.update_from_request(request)
         
-        formatted_date = request.date.strftime("%Y-%m-%d")
+        # 获取目标日期
+        target_date = (
+            request.target_date.strftime("%Y-%m-%d")
+            if request.target_date
+            else get_target_date()
+        )
         
         # 准备所有用户的配置
         users_config = request.users
@@ -51,7 +57,6 @@ async def reserve_seat(request: ReservationRequest) -> Dict[str, Any]:
         
         # 如果结果为空，说明没有找到可用时间段或座位
         if not results:
-            target_date = request.date.strftime("%Y-%m-%d")
             current_time = datetime.now().strftime("%H:%M:%S")
             return {
                 "success": False,
@@ -64,7 +69,7 @@ async def reserve_seat(request: ReservationRequest) -> Dict[str, Any]:
             user_name = users_config[i % len(users_config)].name
             logger.info(
                 f"用户: {user_name}, "
-                f"日期: {formatted_date}, "
+                f"日期: {target_date}, "
                 f"时间段: {result['time_period']}, "
                 f"区域: {result['area']}, "
                 f"座位: {result['seat']}, "

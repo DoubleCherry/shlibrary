@@ -52,18 +52,20 @@ class Settings(BaseSettings):
         Args:
             request: API请求对象
         """
-        self.api_base_url = request.api.base_url
-        self.floor_id = request.api.floor_id
-        self.library_id = request.api.library_id
-        self.seat_reservation_type = request.api.seat_reservation_type
-        self.period_reservation_type = request.api.period_reservation_type
-        self.reservation_interval = request.api.reservation_interval
-        self.area_priority = request.area_priority
-        self.log_level = request.logging.level
-        self.log_rotation = request.logging.rotation
-        self.log_retention = request.logging.retention
-        self.log_encoding = request.logging.encoding
-        self.days_ahead = request.reservation.days_ahead
+        # 只有在请求中提供了相应的配置时才更新
+        if request.api:
+            self.api_base_url = request.api.base_url
+            self.floor_id = request.api.floor_id
+            self.library_id = request.api.library_id
+            self.seat_reservation_type = request.api.seat_reservation_type
+            self.period_reservation_type = request.api.period_reservation_type
+            self.reservation_interval = request.api.reservation_interval
+        
+        if request.area_priority:
+            self.area_priority = request.area_priority
+        
+        if request.reservation:
+            self.days_ahead = request.reservation.days_ahead
     
     model_config = SettingsConfigDict(
         env_file=".env",
