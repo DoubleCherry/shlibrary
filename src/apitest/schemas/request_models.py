@@ -49,27 +49,33 @@ class ApiConfig(BaseModel):
     """API配置模型"""
     base_url: str = Field(
         default_factory=lambda: get_config_value("api.base_url", "https://yuyue.library.sh.cn"),
-        description="基础URL"
+        description="基础URL",
+        example="https://yuyue.library.sh.cn"
     )
     floor_id: str = Field(
         default_factory=lambda: get_config_value("api.floor_id", "4"),
-        description="楼层ID"
+        description="楼层ID",
+        example="4"
     )
     library_id: str = Field(
         default_factory=lambda: get_config_value("api.library_id", "1"),
-        description="图书馆ID"
+        description="图书馆ID",
+        example="1"
     )
     seat_reservation_type: str = Field(
         default_factory=lambda: get_config_value("api.seat_reservation_type", "2"),
-        description="座位预订类型"
+        description="座位预订类型",
+        example="2"
     )
     period_reservation_type: str = Field(
         default_factory=lambda: get_config_value("api.period_reservation_type", "14"),
-        description="时间段预订类型"
+        description="时间段预订类型",
+        example="14"
     )
     reservation_interval: int = Field(
         default_factory=lambda: get_config_value("api.reservation_interval", 500),
-        description="预订请求间隔（毫秒）"
+        description="预订请求间隔（毫秒）",
+        example=500
     )
 
 
@@ -83,16 +89,31 @@ class ReservationConfig(BaseModel):
 
 class ReservationRequest(BaseModel):
     """预订请求模型"""
-    users: List[UserConfig] = Field(..., description="用户配置列表")
+    users: List[UserConfig] = Field(
+        ..., 
+        description="用户配置列表",
+        example=[
+            {
+                "name": "张三",
+                "token": "your_token_here"
+            }
+        ]
+    )
     api: ApiConfig = Field(default_factory=ApiConfig, description="API配置")
     area_priority: List[str] = Field(
         default_factory=lambda: get_config_value("area_priority", ["西", "东", "北", "南"]),
-        description="区域优先级"
+        description="区域优先级",
+        example=["西", "东", "北", "南"]
     )
-    reservation: ReservationConfig = Field(default_factory=ReservationConfig, description="预订配置")
+    reservation: ReservationConfig = Field(
+        default_factory=ReservationConfig, 
+        description="预订配置",
+        example={"days_ahead": 6}
+    )
     target_date: Optional[datetime] = Field(
         default=None,
-        description="目标预订日期，格式：YYYY-MM-DD，如果不提供则根据days_ahead自动计算"
+        description="目标预订日期，格式：YYYY-MM-DD，如果不提供则根据days_ahead自动计算",
+        example="2024-02-20"
     )
 
 
