@@ -47,6 +47,7 @@ class ReservationResult(TypedDict):
     area: str
     seat: str
     status: str
+    user_name: str
 
 
 class SeatReservation:
@@ -581,12 +582,14 @@ class SeatReservation:
                     status = "成功" if result.get("status") == "success" else "失败"
                     message = result.get("message", "")
                     
+                    # 使用接口传入的用户名记录日志
                     logger.info(
-                        f"用户 {user_idx + 1} 在区域 {area_name} "
+                        f"用户 {user_config.name} 在区域 {area_name} "
                         f"时间段 {p_str} 预订结果: {status} - {message}"
                     )
                     
                     results.append({
+                        "user_name": user_config.name,
                         "time_period": p_str,
                         "area": area_name,
                         "seat": seat["seatRowColumn"],
