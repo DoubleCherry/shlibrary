@@ -86,27 +86,23 @@ class ScheduleService:
             # 记录结果
             if results:
                 logger.info(f"预订成功，共 {len(results)} 个结果")
-                # 计算每个用户的结果数量
-                periods_per_user = len(results) // len(self.user_tokens)
                 success_count = 0
                 result_messages = []
-                for i, result in enumerate(results):
-                    # 计算当前结果属于哪个用户
-                    user_index = i // periods_per_user
-                    user_name = self.user_tokens[user_index].name
+                for result in results:
                     status = result['status']
-                    if status == 'success':
+                    if 'success' in status.lower():
                         success_count += 1
                     result_messages.append(
-                        f"{user_name}: {status} ({result['area']} {result['seat']} {result['time_period']})"
+                        f"{result['user_name']}: {status} ({result['area']} {result['seat']} {result['time_period']})"
                     )
                     logger.info(
                         f"预订结果: "
-                        f"用户={user_name}, "
+                        f"用户={result['user_name']}, "
+                        f"时间段={result['time_period']},"
                         f"状态={status}, "
                         f"区域={result['area']}, "
-                        f"座位={result['seat']}, "
-                        f"时间段={result['time_period']}"
+                        f"座位={result['seat']}"
+                        
                     )
                 self.last_run_result = f"成功预订 {success_count}/{len(results)} 个座位。" + " ".join(result_messages)
             else:

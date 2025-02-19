@@ -65,12 +65,9 @@ async def reserve_seat(request: ReservationRequest) -> Dict[str, Any]:
             }
         
         # 记录预订结果
-        periods_per_user = len(results) // len(users_config)
-        for i, result in enumerate(results):
-            user_index = i // periods_per_user
-            user_name = users_config[user_index].name
+        for result in results:
             logger.info(
-                f"用户: {user_name}, "
+                f"用户: {result['user_name']}, "
                 f"日期: {target_date}, "
                 f"时间段: {result['time_period']}, "
                 f"区域: {result['area']}, "
