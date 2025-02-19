@@ -144,7 +144,8 @@ class SeatReservation:
         self,
         area_id: str,
         start_time: str,
-        end_time: str
+        end_time: str,
+        area_name: str
     ) -> List[SeatInfo]:
         """
         获取指定区域的座位信息
@@ -153,6 +154,7 @@ class SeatReservation:
             area_id: 区域ID
             start_time: 开始时间
             end_time: 结束时间
+            area_name: 区域名称
             
         Returns:
             座位信息列表，每个座位包含 ID、状态、行列号等信息
@@ -168,13 +170,13 @@ class SeatReservation:
         # 更新请求头
         headers = update_request_headers(self.headers)
         
-        logger.info(f"请求区域 {area_id} 的座位信息: URL={url}, Headers={headers}, Params={params}")
+        logger.info(f"请求区域 {area_name} 的座位信息: URL={url}, Headers={headers}, Params={params}")
         
         try:
             response = requests.get(url, headers=headers, params=params)
             logger.info(f"状态码: {response.status_code}")
             logger.info(f"响应头: {response.headers}")
-            logger.info(f"响应内容: {response.text}")
+            # logger.info(f"响应内容: {response.text}")
             
             if response.status_code != 200:
                 logger.error(f"请求失败: {response.status_code} - {response.text}")
@@ -183,7 +185,7 @@ class SeatReservation:
             data = response.json()
             seats = data.get("resultValue", [])
             if not seats:
-                logger.warning(f"区域 {area_id} 没有找到任何座位")
+                logger.warning(f"区域 {area_name} 没有找到任何座位")
                 return []
                 
             # 处理每个座位信息，添加 seatRowColumn 字段
@@ -191,7 +193,7 @@ class SeatReservation:
                 seat["seatRowColumn"] = f"{seat['seatRow']} {seat['seatNo']}"
                 
             available_seats = [s for s in seats if s.get("seatStatus") == 3]
-            logger.info(f"区域 {area_id} 找到 {len(seats)} 个座位，其中可用的有 {len(available_seats)} 个")
+            logger.info(f"区域 {area_name} 找到 {len(seats)} 个座位，其中可用的有 {len(available_seats)} 个")
             return seats
         except requests.exceptions.RequestException as e:
             logger.error(f"请求异常: {str(e)}")
@@ -281,15 +283,9 @@ class SeatReservation:
                     
             except requests.exceptions.RequestException as e:
                 logger.error(f"请求异常: {str(e)}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_interval)
-                    continue
                 return {"status": "error", "message": f"请求异常: {str(e)}"}
             except Exception as e:
                 logger.error(f"预订过程出错: {str(e)}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_interval)
-                    continue
                 return {"status": "error", "message": f"预订过程出错: {str(e)}"}
         
         return {"status": "error", "message": "达到最大重试次数"}
@@ -527,7 +523,7 @@ class SeatReservation:
             for period in periods_data:
                 start_time = period["startTime"]
                 end_time = period["endTime"]
-                seats = self.get_area_seats(area_id, start_time, end_time)
+                seats = self.get_area_seats(area_id, start_time, end_time, area_name)
                 if not seats:
                     all_periods_available = False
                     break

@@ -4,6 +4,7 @@
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 import click
 import yaml
@@ -16,12 +17,27 @@ from .core.seat_reservation import SeatReservation, ReservationResult
 from .config.settings import settings
 from .api import endpoints
 from .api import snipe_endpoints
+from .api import schedule_endpoints
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时的处理
+    await schedule_endpoints.schedule_service.initialize()
+    logger.info("应用启动：调度器初始化完成")
+    
+    yield
+    
+    # 关闭时的处理
+    schedule_endpoints.schedule_service.shutdown()
+    logger.info("应用关闭：调度器已停止")
 
 # 创建FastAPI应用
 app = FastAPI(
     title="图书馆座位预订系统",
     description="自动预订图书馆座位的API服务",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # 配置CORS
@@ -36,7 +52,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(endpoints.router)
 app.include_router(snipe_endpoints.router)
-
+app.include_router(schedule_endpoints.router)
 
 def init_logger(log_level: Optional[str] = None) -> None:
     """初始化日志配置
