@@ -81,7 +81,9 @@ class SeatReservation:
         # 按照优先级排序区域
         def get_area_priority(area: Dict[str, Any]) -> int:
             try:
-                return settings.area_priority.index(area["areaName"])
+                # 去掉区域名称中的"区"字后再匹配优先级
+                area_name = area["areaName"].replace("区", "")
+                return settings.area_priority.index(area_name)
             except ValueError:
                 return len(settings.area_priority)
         
