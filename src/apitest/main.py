@@ -18,6 +18,7 @@ from .config.settings import settings
 from .api import endpoints
 from .api import snipe_endpoints
 from .api import schedule_endpoints
+from .api import checkin_endpoints
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,6 +54,7 @@ app.add_middleware(
 app.include_router(endpoints.router)
 app.include_router(snipe_endpoints.router)
 app.include_router(schedule_endpoints.router)
+app.include_router(checkin_endpoints.router)
 
 def init_logger(log_level: Optional[str] = None) -> None:
     """初始化日志配置

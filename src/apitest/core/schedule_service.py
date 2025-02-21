@@ -20,15 +20,25 @@ from ..utils.helpers import get_target_date
 class ScheduleService:
     """定时预订服务"""
     
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self):
-        self.scheduler = AsyncIOScheduler()
-        self.config = ScheduleConfig()
-        self.user_tokens: List[UserToken] = []
-        self.job = None
-        self.last_run_time: Optional[datetime] = None
-        self.last_run_result: Optional[str] = None
-        self._load_user_tokens()
-        logger.info("定时任务服务初始化完成")
+        if not self._initialized:
+            self.scheduler = AsyncIOScheduler()
+            self.config = ScheduleConfig()
+            self.user_tokens: List[UserToken] = []
+            self.job = None
+            self.last_run_time: Optional[datetime] = None
+            self.last_run_result: Optional[str] = None
+            self._load_user_tokens()
+            logger.info("定时任务服务初始化完成")
+            self._initialized = True
         
     def _get_token_file_path(self) -> str:
         """获取token文件路径"""
