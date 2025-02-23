@@ -32,10 +32,7 @@ class CheckinService:
     async def _get_reservation_list(self, token: str) -> List[Dict]:
         """获取预约列表"""
         headers = {
-            "source": "1",
-            "clientId": "1837178870",
-            "token": token,
-            "timestamp": str(int(datetime.now().timestamp() * 1000)),
+            "token": token
         }
         
         all_content = []
@@ -58,7 +55,7 @@ class CheckinService:
                     headers=headers,
                     json=data
                 )
-                # logger.debug(f"预约列表接口响应: {response.text}")
+                logger.debug(f"预约列表接口响应: {response.text}")
                 result = response.json()
                 if result["resultStatus"]["code"] != 0:
                     error_msg = result["resultStatus"]["message"]
@@ -82,10 +79,7 @@ class CheckinService:
     async def _do_checkin(self, token: str, reservation_id: str) -> bool:
         """执行签到"""
         headers = {
-            "source": "1",
-            "clientId": "1837178870",
-            "token": token,
-            "timestamp": str(int(datetime.now().timestamp() * 1000)),
+            "token": token
         }
         
         async with httpx.AsyncClient() as client:
@@ -105,25 +99,59 @@ class CheckinService:
     async def _do_checkout(self, token: str, reservation_id: str) -> bool:
         """执行签退"""
         headers = {
-            "source": "1",
-            "clientId": "1837178870",
-            "token": token,
-            "timestamp": str(int(datetime.now().timestamp() * 1000)),
+            "token": token
         }
         
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.base_url}/eastLibReservation/seatReservation/signOut",
-                headers=headers,
-                params={"reservationId": reservation_id}
-            )
-            logger.debug(f"签退接口响应: {response.text}")
-            result = response.json()
-            if result["resultStatus"]["code"] != 0:
-                error_msg = result["resultStatus"]["message"]
-                logger.error(f"签退失败: {error_msg}")
-                raise Exception(f"签退失败: {error_msg}")
-            return True
+        logger.info(f"开始签退预约: ID={reservation_id}")
+        logger.info(f"签退请求头: {headers}")
+        
+        url = f"{self.base_url}/eastLibReservation/seatReservation/signOut"
+        logger.info(f"签退请求URL: {url}")
+        logger.info(f"签退请求参数: reservationId={reservation_id}")
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:  # 设置30秒超时
+                try:
+                    logger.info("正在发送签退请求...")
+                    response = await client.get(
+                        url,
+                        headers=headers,
+                        params={"reservationId": reservation_id}
+                    )
+                    
+                    # 记录原始响应内容
+                    logger.info(f"签退接口响应状态码: {response.status_code}")
+                    logger.info(f"签退接口响应头: {dict(response.headers)}")
+                    logger.info(f"签退接口原始响应内容: {response.text}")
+                    
+                    if response.status_code != 200:
+                        logger.error(f"签退请求失败，HTTP状态码: {response.status_code}")
+                        raise Exception(f"签退请求失败，HTTP状态码: {response.status_code}")
+                    
+                except httpx.RequestError as e:
+                    logger.error(f"签退接口请求失败: {str(e)}")
+                    raise Exception(f"签退接口请求失败: {str(e)}")
+                
+                # 尝试解析JSON
+                try:
+                    logger.info("正在解析响应JSON...")
+                    result = response.json()
+                    logger.info(f"解析后的响应数据: {result}")
+                except Exception as e:
+                    logger.error(f"签退接口响应解析JSON失败: {str(e)}, 响应内容: {response.text}")
+                    raise Exception(f"签退接口返回格式错误: {response.text}")
+                
+                if result["resultStatus"]["code"] != 0:
+                    error_msg = result["resultStatus"]["message"]
+                    logger.error(f"签退失败: {error_msg}")
+                    raise Exception(f"签退失败: {error_msg}")
+                    
+                logger.info("签退成功")
+                return True
+                
+        except Exception as e:
+            logger.error(f"签退时发生错误: {str(e)}")
+            raise
             
     def _get_closest_reservation(self, reservations: List[Dict], for_checkout: bool = False) -> Optional[Dict]:
         """获取最接近当前时间的预约信息"""

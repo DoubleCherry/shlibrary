@@ -35,30 +35,20 @@ def generate_sign(client_id: str, access_token: str, timestamp: str) -> str:
 
 def update_request_headers(headers: Dict[str, str], force_update: bool = False) -> Dict[str, str]:
     """
-    更新请求头信息，包括时间戳和签名
+    更新请求头信息
     
     Args:
         headers: 原始请求头
-        force_update: 是否强制更新时间戳和签名，默认为False
+        force_update: 是否强制更新，默认为False
         
     Returns:
         更新后的请求头
     """
-    new_headers = headers.copy()
+    new_headers = {}
     
-    # 仅在force_update为True或原headers中没有timestamp和sign时更新
-    if force_update or "timestamp" not in headers or "sign" not in headers:
-        # 更新时间戳
-        timestamp = str(int(time.time() * 1000))
-        new_headers["timestamp"] = timestamp
-        
-        # 更新签名
-        if "clientId" in new_headers and "accessToken" in new_headers:
-            new_headers["sign"] = generate_sign(
-                new_headers["clientId"],
-                new_headers["accessToken"],
-                timestamp
-            )
+    # 只保留token参数
+    if "token" in headers:
+        new_headers["token"] = headers["token"]
     
     # 添加标准HTTP请求头
     new_headers.update({
