@@ -22,7 +22,7 @@ api:
   # 时间段预订类型
   period_reservation_type: "14"
   # 预订请求间隔（毫秒）
-  reservation_interval: 500
+  reservation_interval: 1000
 
 # 区域优先级配置
 area_priority:
@@ -44,4 +44,4 @@ reservation:
   days_ahead: 6
 
 # 捡漏配置
-snipe_interval: 60  # 捡漏频率(秒) 
+snipe_interval: 300  # 捡漏频率(秒) 
