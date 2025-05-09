@@ -1,13 +1,3 @@
-# 用户配置
-users:
-  - name: "用户1"
-    headers:
-      clientId: "1837178870"
-      source: "1"
-      accessToken: "c531acb567c7daa10a4c8cfec83b72da"
-      sign: "3cdf99e17baeab5f6bd2b8828dd0752dfed46a9b28f50b0ae500e33da45e4a77"
-      timestamp: "1739509170680"
-      Cookie: "Hm_lpvt_5baf77ff3c256db2d753d59a23540a6b=1739352030; Hm_lvt_5baf77ff3c256db2d753d59a23540a6b=1739340195,1739352030"
 
 # API 配置
 api:
